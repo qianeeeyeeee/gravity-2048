@@ -1,0 +1,1551 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f3efe7">
+  <title>2048 自由落点</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3efe7;
+      --surface: rgba(255, 253, 249, .9);
+      --ink: #302d29;
+      --muted: #786f66;
+      --line: #ded5c9;
+      --accent: #e8893b;
+      --danger: #d95c4a;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; margin: 0; }
+
+    body {
+      min-height: 100dvh;
+      overflow-x: hidden;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 20% 0%, rgba(255, 255, 255, .94), transparent 34rem),
+        linear-gradient(145deg, #f8f4ed 0%, var(--bg) 55%, #ebe4d9 100%);
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button:focus-visible,
+    canvas:focus-visible {
+      outline: 3px solid rgba(232, 137, 59, .42);
+      outline-offset: 3px;
+    }
+
+    .app {
+      width: min(100%, 960px);
+      min-height: 100dvh;
+      margin: 0 auto;
+      padding: clamp(14px, 3vw, 28px) clamp(14px, 3vw, 28px) calc(18px + var(--safe-bottom));
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: clamp(10px, 2vh, 20px);
+    }
+
+    .brand-kicker {
+      margin: 0 0 2px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(27px, 4vw, 42px);
+      line-height: 1;
+      letter-spacing: -.045em;
+      font-weight: 900;
+    }
+
+    .stats { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+    .stat {
+      min-width: 76px;
+      padding: 9px 12px 10px;
+      border: 1px solid rgba(222, 213, 201, .86);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 7px 20px rgba(81, 65, 49, .06);
+      text-align: center;
+      backdrop-filter: blur(10px);
+    }
+
+    .stat-label {
+      display: block;
+      margin-bottom: 1px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+    }
+
+    .stat-value {
+      display: block;
+      min-width: 2ch;
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1.15;
+      font-variant-numeric: tabular-nums;
+      transition: transform .15s ease, color .15s ease;
+    }
+
+    .stat-value.bump { color: var(--accent); transform: translateY(-2px) scale(1.08); }
+
+    .game-layout {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      gap: clamp(18px, 4vw, 34px);
+    }
+
+    .board-shell {
+      position: relative;
+      width: min(39vh, 88vw, 354px);
+      aspect-ratio: 43 / 76;
+      flex: 0 0 auto;
+      border: 1px solid rgba(104, 88, 75, .13);
+      border-radius: 22px;
+      overflow: hidden;
+      background: #b8aaa0;
+      box-shadow:
+        0 22px 48px rgba(71, 56, 43, .14),
+        inset 0 1px 0 rgba(255, 255, 255, .18);
+      touch-action: none;
+      user-select: none;
+    }
+
+    #boardCanvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+
+    .drop-caption {
+      position: absolute;
+      top: 10px;
+      left: 13px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: rgba(80, 68, 58, .78);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      pointer-events: none;
+    }
+
+    .drop-caption::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 5px rgba(232, 137, 59, .14);
+    }
+
+    .side-panel { width: 224px; display: flex; flex-direction: column; gap: 11px; }
+
+    .card {
+      padding: 15px;
+      border: 1px solid rgba(222, 213, 201, .92);
+      border-radius: 18px;
+      background: var(--surface);
+      box-shadow: 0 12px 30px rgba(81, 65, 49, .07);
+      backdrop-filter: blur(12px);
+    }
+
+    .card-label {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .next-row { display: grid; place-items: center; padding: 2px 0; }
+
+    .next-preview {
+      width: 68px;
+      height: 68px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border-radius: 16px;
+      background: #eee4da;
+      color: #776e65;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 7px 14px rgba(78, 61, 46, .11);
+      font-size: 26px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .status-title { margin: 0 0 4px; font-size: 14px; font-weight: 850; line-height: 1.3; }
+    .status-copy { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+    .meter-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 9px; }
+    .meter-head span:first-child { color: var(--muted); font-size: 11px; font-weight: 800; }
+    .meter-value { font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
+
+    .meter-track {
+      height: 9px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e8e0d6;
+      box-shadow: inset 0 1px 2px rgba(74, 59, 45, .09);
+    }
+
+    .meter-fill {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: #79af84;
+      transition: width .2s ease, background-color .18s ease;
+    }
+
+    .meter-track.is-warning .meter-fill { background: #e0a64d; }
+    .meter-track.is-danger .meter-fill { background: var(--danger); }
+
+    .meter-note { margin: 8px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+
+    .key-help { display: grid; gap: 8px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .key-help div { display: flex; align-items: center; gap: 8px; }
+
+    kbd {
+      min-width: 24px;
+      padding: 3px 6px;
+      border: 1px solid #d8cfc3;
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      color: #554d45;
+      background: #faf7f1;
+      font: inherit;
+      font-size: 10px;
+      font-weight: 850;
+      text-align: center;
+    }
+
+
+    .restart-button {
+      width: 100%;
+      min-height: 43px;
+      border: 1px solid #d7cdc0;
+      border-radius: 13px;
+      background: #fffaf3;
+      color: #5d544b;
+      font-size: 13px;
+      font-weight: 850;
+      cursor: pointer;
+      transition: transform .14s ease, border-color .14s ease, background-color .14s ease;
+    }
+
+    .restart-button:hover { border-color: #c8baa9; background: #fffdf9; transform: translateY(-1px); }
+
+    .mobile-controls {
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: 52px 78px 52px;
+      gap: 8px;
+      width: 64px;
+      margin: 0;
+      align-self: center;
+      flex: 0 0 auto;
+    }
+
+    .control-button {
+      width: 100%;
+      min-height: 52px;
+      display: grid;
+      place-items: center;
+      padding: 0 6px;
+      border: 1px solid #d8cfc3;
+      border-radius: 14px;
+      background: rgba(255, 253, 249, .92);
+      font-size: 19px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(81, 65, 49, .06);
+    }
+
+    .control-button.drop {
+      color: #fff;
+      border-color: #d97d35;
+      background: var(--accent);
+      font-size: 12px;
+      line-height: 1.25;
+      box-shadow: 0 9px 20px rgba(232, 137, 59, .22);
+    }
+
+    .control-button:disabled { opacity: .45; cursor: default; }
+
+    .game-over {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      background: rgba(48, 45, 41, .62);
+      backdrop-filter: blur(5px);
+    }
+
+    .game-over[hidden] { display: none; }
+
+    .game-over-card {
+      width: min(100%, 245px);
+      padding: 22px 18px 18px;
+      border: 1px solid rgba(255, 255, 255, .42);
+      border-radius: 19px;
+      background: #fffdf9;
+      box-shadow: 0 24px 50px rgba(38, 30, 24, .26);
+      text-align: center;
+      animation: overlay-in .25s ease-out;
+    }
+
+    @keyframes overlay-in {
+      from { opacity: 0; transform: translateY(8px) scale(.96); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .game-over-card p {
+      margin: 0 0 4px;
+      color: var(--danger);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .08em;
+    }
+
+    .game-over-card h2 { margin: 0 0 8px; font-size: 25px; letter-spacing: -.04em; }
+    .final-score { display: block; margin: 0 0 16px; font-size: 29px; font-weight: 900; font-variant-numeric: tabular-nums; }
+    .game-over-card .restart-button { color: #fff; border-color: #d97d35; background: var(--accent); }
+
+    @media (max-width: 720px) {
+      .app { justify-content: flex-start; padding-top: 12px; }
+      .topbar { align-items: center; margin-bottom: 8px; }
+      .brand-kicker { display: none; }
+      h1 { font-size: 27px; }
+
+      .stat { min-width: 62px; padding: 7px 9px 8px; border-radius: 12px; }
+      .stat:nth-child(3) { display: none; }
+      .stat-value { font-size: 16px; }
+
+      .game-layout { flex-wrap: wrap; flex-direction: row; align-items: center; gap: 10px; }
+      .board-shell { width: min(45vh, calc(100vw - 106px), 310px); }
+
+      .side-panel {
+        flex: 1 0 100%;
+        width: min(100%, 354px);
+        display: grid;
+        grid-template-columns: 1.08fr 1fr;
+        gap: 9px;
+      }
+
+      .card { padding: 12px; border-radius: 15px; }
+      .card-label { margin-bottom: 7px; }
+      .next-preview { width: 58px; height: 58px; font-size: 23px; }
+      .status-copy { display: none; }
+      .key-help { display: none; }
+      .restart-card { display: flex; align-items: stretch; }
+      .restart-card .card-label { display: none; }
+      .restart-card .restart-button { min-height: 49px; }
+    }
+
+    @media (min-width: 721px) and (max-height: 820px) {
+      .board-shell { width: min(43vh, 316px); }
+      .topbar { margin-bottom: 8px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="brand-kicker">Free drop physics</p>
+        <h1>2048 下落</h1>
+      </div>
+      <div class="stats" aria-label="游戏数据">
+        <div class="stat"><span class="stat-label">得分</span><strong class="stat-value" id="scoreValue">0</strong></div>
+        <div class="stat"><span class="stat-label">最高分</span><strong class="stat-value" id="bestValue">0</strong></div>
+        <div class="stat"><span class="stat-label">最大块</span><strong class="stat-value" id="maxTileValue">2</strong></div>
+      </div>
+    </header>
+
+    <section class="game-layout" aria-label="2048 自由落点游戏">
+      <div class="board-shell">
+        <canvas id="boardCanvas" tabindex="0" role="application" aria-label="自由落点 2048 棋盘。移动鼠标或手指选择任意横向位置，松开即可落下方块。"></canvas>
+        <div class="drop-caption">移动选择任意位置，点击或松开落下</div>
+        <div class="game-over" id="gameOver" hidden>
+          <div class="game-over-card">
+            <p>堆叠越过高度线</p>
+            <h2>游戏结束</h2>
+            <strong class="final-score" id="finalScore">0</strong>
+            <button class="restart-button" id="gameOverRestart" type="button">再来一局</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mobile-controls" aria-label="游戏功能按钮">
+        <button class="control-button" id="leftButton" type="button" aria-label="向左微调">←</button>
+        <button class="control-button drop" id="dropButton" type="button">落下当前方块</button>
+        <button class="control-button" id="rightButton" type="button" aria-label="向右微调">→</button>
+      </div>
+
+      <aside class="side-panel" aria-label="游戏信息与控制">
+        <div class="card">
+          <div class="next-row">
+            <div class="next-preview" id="nextPreview">2</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="meter-head">
+            <span>堆叠高度</span>
+            <strong class="meter-value" id="heightValue">0%</strong>
+          </div>
+          <div class="meter-track" id="meterTrack" role="progressbar" aria-label="堆叠高度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="meter-fill" id="meterFill"></div>
+          </div>
+          <p class="meter-note">越过上方的虚线高度线后游戏结束，合并后会重新计算高度。</p>
+        </div>
+
+        <div class="card">
+          <p class="card-label">操作</p>
+          <div class="key-help">
+            <div><kbd>←</kbd><kbd>→</kbd><span>精细移动落点</span></div>
+            <div><kbd>空格</kbd><span>落下当前方块</span></div>
+            <div><kbd>R</kbd><span>重新开始</span></div>
+          </div>
+        </div>
+
+        <div class="card restart-card">
+          <p class="card-label">需要重来？</p>
+          <button class="restart-button" id="restartButton" type="button">重新开始</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+
+  <script>
+    (() => {
+      "use strict";
+
+      const WORLD_W = 430;
+      const WORLD_H = 760;
+      const FLOOR_Y = 716;
+      const MIN_TILE_SIZE = 64;
+      const MAX_TILE_SIZE = 156;
+      const TILE_SIZE = 68;
+      const HALF_TILE = TILE_SIZE / 2;
+      const VISUAL_TILE_SCALE = 0.96;
+      const VISUAL_CORNER_RADIUS = 16.2;
+      const ACTIVE_Y = 42;
+      const DANGER_Y = ACTIVE_Y;                       // 高度线位于下落起点
+      const MAX_STACK_HEIGHT = FLOOR_Y - DANGER_Y;
+      const SPAWN_GAP = 5;
+      const FIXED_DT = 1 / 120;
+      const GRAVITY = 1750;
+      const WALL_RESTITUTION = 0.2;
+      const FLOOR_RESTITUTION = 0.14;
+      const CONTACT_RESTITUTION = 0.2;
+      const CONTACT_RECOIL = 0.05;
+      const MIN_BOUNCE_SPEED = 68;
+      const SOFT_SPRING = 62;
+      const SOFT_DAMPING = 8.6;
+      const CONTACT_EPSILON = 2.5;
+      const MERGE_EPSILON = 5.5;
+
+      const canvas = document.getElementById("boardCanvas");
+      const ctx = canvas.getContext("2d");
+      const scoreValue = document.getElementById("scoreValue");
+      const bestValue = document.getElementById("bestValue");
+      const maxTileValue = document.getElementById("maxTileValue");
+      const heightValue = document.getElementById("heightValue");
+      const meterTrack = document.getElementById("meterTrack");
+      const meterFill = document.getElementById("meterFill");
+      const nextPreview = document.getElementById("nextPreview");
+      const statusTitle = document.getElementById("statusTitle");
+      const statusCopy = document.getElementById("statusCopy");
+      const gameOver = document.getElementById("gameOver");
+      const finalScore = document.getElementById("finalScore");
+      const restartButton = document.getElementById("restartButton");
+      const gameOverRestart = document.getElementById("gameOverRestart");
+      const leftButton = document.getElementById("leftButton");
+      const rightButton = document.getElementById("rightButton");
+      const dropButton = document.getElementById("dropButton");
+
+      const palettes = [
+        { min: 8192, bg: "#2f7768", fg: "#fffdf9" },
+        { min: 4096, bg: "#476b87", fg: "#fffdf9" },
+        { min: 2048, bg: "#edcf72", fg: "#fffdf9" },
+        { min: 1024, bg: "#edc53f", fg: "#fffdf9" },
+        { min: 512, bg: "#edc850", fg: "#fffdf9" },
+        { min: 256, bg: "#edcc61", fg: "#fffdf9" },
+        { min: 128, bg: "#edcf72", fg: "#fffdf9" },
+        { min: 64, bg: "#f65e3b", fg: "#fffdf9" },
+        { min: 32, bg: "#f67c5f", fg: "#fffdf9" },
+        { min: 16, bg: "#f59563", fg: "#fffdf9" },
+        { min: 8, bg: "#f2b179", fg: "#fffdf9" },
+        { min: 4, bg: "#ede0c8", fg: "#776e65" },
+        { min: 2, bg: "#eee4da", fg: "#776e65" }
+      ];
+
+      const state = {
+        mode: "idle",
+        bodies: [],
+        bodySerial: 0,
+        effects: [],
+        activeTile: null,
+        aimX: WORLD_W / 2,
+        nextValue: 2,
+        score: 0,
+        best: 0,
+        maxTile: 2,
+        reached2048: false,
+        pointerDown: false,
+        dropReady: false,
+        contactImpulsePairs: new Set(),
+        physicsStep: 0,
+        stableTime: 0,
+        quiet: false,
+        roundToken: 0,
+        lastMergeAt: 0
+      };
+
+      const view = { width: 1, height: 1, scaleX: 1, scaleY: 1 };
+      let accumulator = 0;
+      let lastFrameTime = performance.now();
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function sizeForValue(value) {
+        const level = Math.max(1, Math.log2(Math.max(2, value)));
+        return clamp(MIN_TILE_SIZE + (level - 1) * 10, MIN_TILE_SIZE, MAX_TILE_SIZE);
+      }
+
+      function halfSizeForValue(value) {
+        return sizeForValue(value) / 2;
+      }
+
+      function cornerRadiusForSize(size) {
+        return VISUAL_CORNER_RADIUS * size / TILE_SIZE;
+      }
+
+      function activeHalfSize() {
+        return state.activeTile ? halfSizeForValue(state.activeTile.value) : HALF_TILE;
+      }
+
+      function clampXForValue(x, value) {
+        const halfSize = halfSizeForValue(value);
+        return clamp(x, halfSize, WORLD_W - halfSize);
+      }
+
+      function clampAimX(x) {
+        return state.activeTile ? clampXForValue(x, state.activeTile.value) : x;
+      }
+
+      function isPlaying() {
+        return state.mode === "ready" || state.mode === "falling";
+      }
+
+      function randomValue() {
+        return Math.random() < 0.1 ? 4 : 2;
+      }
+
+      function paletteFor(value) {
+        return palettes.find((entry) => value >= entry.min) || palettes[palettes.length - 1];
+      }
+
+      function delay(ms) {
+        return new Promise((resolve) => window.setTimeout(resolve, ms));
+      }
+
+      function bodyBounds(body) {
+        const shape = collisionShape(body);
+        return {
+          left: body.x - shape.halfW,
+          right: body.x + shape.halfW,
+          top: body.y - shape.halfH,
+          bottom: body.y + shape.halfH
+        };
+      }
+
+      function syncCanvasSize() {
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        view.width = rect.width;
+        view.height = rect.height;
+        view.scaleX = WORLD_W / rect.width;
+        view.scaleY = WORLD_H / rect.height;
+        canvas.width = Math.round(rect.width * dpr);
+        canvas.height = Math.round(rect.height * dpr);
+      }
+
+      function canvasToWorldX(clientX) {
+        const rect = canvas.getBoundingClientRect();
+        return clampAimX((clientX - rect.left) * (WORLD_W / rect.width));
+      }
+
+      function roundedRectPath(context, x, y, width, height, radius) {
+        const r = Math.min(radius, width / 2, height / 2);
+        context.beginPath();
+        context.moveTo(x + r, y);
+        context.lineTo(x + width - r, y);
+        context.quadraticCurveTo(x + width, y, x + width, y + r);
+        context.lineTo(x + width, y + height - r);
+        context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+        context.lineTo(x + r, y + height);
+        context.quadraticCurveTo(x, y + height, x, y + height - r);
+        context.lineTo(x, y + r);
+        context.quadraticCurveTo(x, y, x + r, y);
+        context.closePath();
+      }
+
+      function softTilePath(item, size) {
+        const points = 34;
+        const pulse = item.pulse || 0;
+        const squash = clamp(item.squash || 0, -0.24, 0.42);
+        const fallStretch = clamp((item.vy || 0) / 15000, -0.035, 0.085);
+        const scaleX = 1 + pulse * 0.045 + squash * 0.2;
+        const scaleY = 1 + pulse * 0.045 - squash * 0.28 + fallStretch;
+        const rippleAmount = Math.abs(squash) * 0.055;
+        const phase = item.phase || 0;
+        const shapeScale = VISUAL_TILE_SCALE;
+
+        ctx.beginPath();
+        for (let index = 0; index <= points; index += 1) {
+          const angle = (index / points) * Math.PI * 2;
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          const nx = Math.sign(cos) * Math.pow(Math.abs(cos), 0.56);
+          const ny = Math.sign(sin) * Math.pow(Math.abs(sin), 0.56);
+
+          // 中心附近保持形状，越靠近边缘/角落，刚度越低，形变越明显。
+          const softX = 0.18 + 0.82 * Math.pow(Math.abs(nx), 1.55);
+          const softY = 0.18 + 0.82 * Math.pow(Math.abs(ny), 1.55);
+          const targetX = nx * scaleX;
+          const targetY = ny * scaleY;
+          const softXPos = nx + (targetX - nx) * softX;
+          const softYPos = ny + (targetY - ny) * softY;
+          const ripple = 1 + Math.sin(phase + angle * 4) * rippleAmount;
+          const px = softXPos * shapeScale * size * 0.5 * ripple;
+          const py = softYPos * shapeScale * size * 0.5 * ripple;
+
+          if (index === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+      }
+
+      function drawTile(item, options = {}) {
+        const value = item.value;
+        const x = item.x;
+        const y = item.y;
+        const size = sizeForValue(value);
+        const pulse = item.pulse || 0;
+        const squash = item.squash || 0;
+        const alpha = options.alpha == null ? 1 : options.alpha;
+        const active = Boolean(options.active);
+        const palette = paletteFor(value);
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(x, y);
+
+        if (active) {
+          ctx.shadowColor = "rgba(70, 53, 39, .22)";
+          ctx.shadowBlur = 18;
+          ctx.shadowOffsetY = 8;
+        } else {
+          ctx.shadowColor = "rgba(70, 53, 39, .16)";
+          ctx.shadowBlur = 11;
+          ctx.shadowOffsetY = 5;
+        }
+
+        softTilePath(item, size);
+        ctx.fillStyle = palette.bg;
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+        ctx.lineWidth = active ? 2.4 : 1;
+        ctx.strokeStyle = active ? "rgba(255,255,255,.75)" : "rgba(255,255,255,.28)";
+        ctx.stroke();
+
+        // 内部核心比边缘更硬，形变小，形成柔和的层次感。
+        ctx.save();
+        const coreScale = 0.68 - Math.min(Math.abs(squash), 0.42) * 0.04;
+        ctx.scale(coreScale, coreScale);
+        roundedRectPath(ctx, -size / 2, -size / 2, size, size, 14);
+        ctx.globalAlpha = alpha * 0.09;
+        ctx.fillStyle = "#fffdf9";
+        ctx.fill();
+        ctx.restore();
+
+        const text = String(value);
+        const baseFontSize = text.length >= 5 ? 15 : text.length === 4 ? 18 : text.length === 3 ? 21 : 27;
+        const fontSize = Math.min(42, baseFontSize * size / TILE_SIZE);
+        ctx.fillStyle = palette.fg;
+        ctx.font = `900 ${fontSize}px Inter, "Segoe UI", "PingFang SC", sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(text, 0, 1);
+        ctx.restore();
+      }
+
+      function renderBoard() {
+        const pixelWidth = canvas.width;
+        const pixelHeight = canvas.height;
+        if (!pixelWidth || !pixelHeight) return;
+
+        ctx.setTransform(pixelWidth / WORLD_W, 0, 0, pixelHeight / WORLD_H, 0, 0);
+        ctx.clearRect(0, 0, WORLD_W, WORLD_H);
+
+        ctx.fillStyle = "#b8aaa0";
+        ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+
+        ctx.fillStyle = "rgba(255,255,255,.035)";
+        for (let y = 18; y < WORLD_H; y += 34) {
+          for (let x = 17; x < WORLD_W; x += 34) {
+            ctx.beginPath();
+            ctx.arc(x, y, 1.15, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        ctx.fillStyle = "rgba(217,92,74,.055)";
+        ctx.fillRect(0, 0, WORLD_W, DANGER_Y);
+
+        ctx.save();
+        ctx.setLineDash([8, 8]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(217,92,74,.7)";
+        ctx.beginPath();
+        ctx.moveTo(0, DANGER_Y);
+        ctx.lineTo(WORLD_W, DANGER_Y);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = "rgba(174,65,52,.82)";
+        ctx.font = '800 11px Inter, "Segoe UI", "PingFang SC", sans-serif';
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        ctx.fillText("下落高度上限", WORLD_W - 13, DANGER_Y - 7);
+
+        ctx.fillStyle = "rgba(255,255,255,.18)";
+        ctx.fillRect(0, FLOOR_Y, WORLD_W, WORLD_H - FLOOR_Y);
+
+        if (state.mode === "ready" || state.mode === "falling") {
+          const x = state.activeTile ? state.activeTile.x : state.aimX;
+          ctx.save();
+          ctx.setLineDash([5, 10]);
+          ctx.lineWidth = state.mode === "falling" ? 2 : 1.5;
+          ctx.strokeStyle = state.mode === "falling"
+            ? "rgba(255,255,255,.72)"
+            : "rgba(255,255,255,.42)";
+          ctx.beginPath();
+          ctx.moveTo(x, ACTIVE_Y + activeHalfSize() + 4);
+          ctx.lineTo(x, FLOOR_Y - 3);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        state.effects.forEach((effect) => {
+          ctx.save();
+          ctx.globalAlpha = clamp(effect.life / effect.maxLife, 0, 1);
+          if (effect.type === "text") {
+            ctx.fillStyle = "#fffdf9";
+            ctx.font = "900 17px Inter, \"Segoe UI\", \"PingFang SC\", sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.shadowColor = "rgba(46,37,30,.35)";
+            ctx.shadowBlur = 8;
+            ctx.fillText(effect.text, effect.x, effect.y);
+          } else {
+            ctx.translate(effect.x, effect.y);
+            ctx.rotate(effect.angle);
+            roundedRectPath(ctx, -effect.size / 2, -2, effect.size, 4, 2);
+            ctx.fillStyle = effect.color;
+            ctx.fill();
+          }
+          ctx.restore();
+        });
+
+        state.bodies.forEach((body) => drawTile(body));
+        if (state.activeTile) {
+          drawTile(state.activeTile, {
+            active: true,
+            alpha: state.dropReady || state.mode === "ready" ? 1 : 0.28
+          });
+        }
+      }
+
+      function updateScoreUI(animate = false) {
+        scoreValue.textContent = String(state.score);
+        bestValue.textContent = String(state.best);
+        maxTileValue.textContent = String(state.maxTile);
+
+        if (!animate) return;
+        scoreValue.classList.remove("bump");
+        void scoreValue.offsetWidth;
+        scoreValue.classList.add("bump");
+        window.setTimeout(() => scoreValue.classList.remove("bump"), 190);
+      }
+
+      function updateNextPreview() {
+        const palette = paletteFor(state.nextValue);
+        nextPreview.textContent = String(state.nextValue);
+        nextPreview.style.background = palette.bg;
+        nextPreview.style.color = palette.fg;
+      }
+
+      function updateStatus(title, copy) {
+        if (statusTitle) statusTitle.textContent = title;
+        if (copy && statusCopy) statusCopy.textContent = copy;
+      }
+
+      function canDropActiveTile() {
+        return Boolean(state.activeTile && isPlaying());
+      }
+
+      function spawnYForX(x, value) {
+        let spawnY = ACTIVE_Y;
+        const newHalfSize = halfSizeForValue(value);
+
+        // 同一条投放下落线可以连续投放。若新块会与空中块重叠，
+        // 就把新块放到上一块正上方，由重力驱动它们依次追击和碰撞。
+        state.bodies.forEach((body) => {
+          if (Math.abs(body.x - x) >= newHalfSize + halfSizeForValue(body.value) - 1) return;
+          const candidateY = bodyBounds(body).top - newHalfSize - SPAWN_GAP;
+          if (candidateY < spawnY) spawnY = candidateY;
+        });
+
+        return spawnY;
+      }
+
+      function updateControls() {
+        const aiming = isPlaying();
+        leftButton.disabled = !aiming;
+        rightButton.disabled = !aiming;
+        dropButton.disabled = !state.dropReady;
+      }
+
+      function refreshDropReadiness(force = false) {
+        const nextReady = canDropActiveTile();
+        if (!force && nextReady === state.dropReady) return;
+        state.dropReady = nextReady;
+        updateControls();
+        if (!force && state.mode === "falling" && state.activeTile) {
+          if (nextReady) {
+            updateStatus("可以继续下落", "上一块仍在下落，点击、松开或按空格可立刻投下下一块。");
+          } else {
+            updateStatus("上一块下落中", "投放口正在腾出，可先移动选择下一块的落点。");
+          }
+        }
+      }
+
+      function highestStack() {
+        let highest = 0;
+        state.bodies.forEach((body) => {
+          const bounds = bodyBounds(body);
+          highest = Math.max(highest, FLOOR_Y - bounds.top);
+        });
+        return Math.max(0, highest);
+      }
+
+      function updateHeightUI() {
+        const height = clamp(highestStack(), 0, MAX_STACK_HEIGHT);
+        const percent = clamp(height / MAX_STACK_HEIGHT, 0, 1);
+        const displayPercent = Math.round(percent * 100);
+
+        heightValue.textContent = `${displayPercent}%`;
+        meterFill.style.width = `${displayPercent}%`;
+        meterTrack.classList.toggle("is-warning", percent >= 0.78 && percent <= 1);
+        meterTrack.classList.toggle("is-danger", percent > 1);
+        meterTrack.setAttribute("aria-valuenow", String(displayPercent));
+      }
+
+      function addTextEffect(x, y, text) {
+        state.effects.push({ type: "text", x, y, text, life: 0.75, maxLife: 0.75, vy: -46 });
+      }
+
+      function addMergeSparks(x, y) {
+        for (let i = 0; i < 9; i += 1) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 45 + Math.random() * 90;
+          state.effects.push({
+            type: "spark",
+            x,
+            y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 30,
+            angle,
+            size: 5 + Math.random() * 7,
+            color: i % 2 ? "#fff5dc" : paletteFor(256).bg,
+            life: 0.42 + Math.random() * 0.18,
+            maxLife: 0.6
+          });
+        }
+      }
+
+
+      function createBody(value, x, y, vx = 0, vy = 0) {
+        return {
+          id: ++state.bodySerial,
+          value,
+          x,
+          y,
+          vx,
+          vy,
+          w: sizeForValue(value),
+          h: sizeForValue(value),
+          pulse: 0,
+          squash: 0,
+          squashVelocity: 0,
+          phase: (state.bodySerial * 1.73) % (Math.PI * 2),
+          contactBelow: false
+        };
+      }
+
+      function collisionShape(body) {
+        const pulse = body.pulse || 0;
+        const squash = clamp(body.squash || 0, -0.24, 0.42);
+        const fallStretch = clamp((body.vy || 0) / 15000, -0.035, 0.085);
+        const scaleX = 1 + pulse * 0.045 + squash * 0.2;
+        const scaleY = 1 + pulse * 0.045 - squash * 0.28 + fallStretch;
+        const halfW = body.w * 0.5 * VISUAL_TILE_SCALE * scaleX;
+        const halfH = body.h * 0.5 * VISUAL_TILE_SCALE * scaleY;
+        const corner = Math.min(
+          cornerRadiusForSize(body.w) * Math.sqrt(scaleX * scaleY),
+          halfW - 1,
+          halfH - 1
+        );
+        return { halfW, halfH, corner };
+      }
+
+      function contactsFor(a, b) {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const absX = Math.abs(dx);
+        const absY = Math.abs(dy);
+        const shapeA = collisionShape(a);
+        const shapeB = collisionShape(b);
+        const overlapX = shapeA.halfW + shapeB.halfW - absX;
+        const overlapY = shapeA.halfH + shapeB.halfH - absY;
+
+        // 两个圆角矩形的 Minkowski 和仍是圆角矩形，因此可以精确计算
+        // 平面、圆角以及角落接触，而不是使用方形的 AABB 交点。
+        const coreHalfX = Math.max(0, shapeA.halfW - shapeA.corner)
+          + Math.max(0, shapeB.halfW - shapeB.corner);
+        const coreHalfY = Math.max(0, shapeA.halfH - shapeA.corner)
+          + Math.max(0, shapeB.halfH - shapeB.corner);
+        const qx = Math.max(absX - coreHalfX, 0);
+        const qy = Math.max(absY - coreHalfY, 0);
+        const cornerDistance = Math.hypot(qx, qy);
+        const separation = cornerDistance - (shapeA.corner + shapeB.corner);
+        const penetration = Math.max(0, -separation);
+
+        let normalX = 0;
+        let normalY = 0;
+        if (cornerDistance > 0.0001) {
+          normalX = Math.sign(dx) * qx / cornerDistance;
+          normalY = Math.sign(dy) * qy / cornerDistance;
+        } else if (overlapX < overlapY) {
+          normalX = Math.sign(dx) || 1;
+        } else {
+          normalY = Math.sign(dy) || 1;
+        }
+
+        return { dx, dy, overlapX, overlapY, separation, penetration, normalX, normalY };
+      }
+
+
+      function isSoftShoulderContact(contact) {
+        const horizontal = Math.abs(contact.normalX);
+        const vertical = Math.abs(contact.normalY);
+        return vertical > 0.16 && vertical < 0.985 && horizontal > 0.14;
+      }
+
+      function responseNormalFor(contact) {
+        if (!isSoftShoulderContact(contact)) {
+          return { x: contact.normalX, y: contact.normalY, soft: false };
+        }
+        // 圆角肩部只保留少量竖直支撑，其余接触转为水平推力。
+        // 这样方块会像柔体一样把两侧轻轻挤开，而不是被圆角硬托住。
+        const responseX = contact.normalX;
+        const responseY = Math.sign(contact.normalY) * Math.min(Math.abs(contact.normalY), 0.34);
+        const length = Math.hypot(responseX, responseY) || 1;
+        return { x: responseX / length, y: responseY / length, soft: true };
+      }
+
+      function findMergeContact() {
+        let bestPair = null;
+        let bestSeparation = Infinity;
+
+        // 合成优先：扫描所有同数字块，并选择接触程度最高的一对。
+        // 该检查会先于普通碰撞求解执行，避免可合成方块被弹开。
+        for (let i = 0; i < state.bodies.length; i += 1) {
+          for (let j = i + 1; j < state.bodies.length; j += 1) {
+            const a = state.bodies[i];
+            const b = state.bodies[j];
+            if (a.value !== b.value) continue;
+
+            const contact = contactsFor(a, b);
+            if (contact.separation > MERGE_EPSILON) continue;
+            if (contact.separation < bestSeparation) {
+              bestSeparation = contact.separation;
+              bestPair = { a, b };
+            }
+          }
+        }
+
+        return bestPair;
+      }
+
+      function resolveContacts() {
+        for (let i = 0; i < state.bodies.length; i += 1) {
+          for (let j = i + 1; j < state.bodies.length; j += 1) {
+            const a = state.bodies[i];
+            const b = state.bodies[j];
+            // 同数字方块只走合成路径，不参与普通弹性碰撞。
+            if (a.value === b.value) continue;
+
+            const contact = contactsFor(a, b);
+            if (contact.penetration <= 0) continue;
+
+            const response = responseNormalFor(contact);
+            const responseX = response.x;
+            const responseY = response.y;
+            const correctionStrength = response.soft ? 0.5 : 0.74;
+            const correction = Math.max(contact.penetration - 0.08, 0) * correctionStrength;
+            a.x -= responseX * correction * 0.5;
+            a.y -= responseY * correction * 0.5;
+            b.x += responseX * correction * 0.5;
+            b.y += responseY * correction * 0.5;
+
+            const relativeVelocity =
+              (b.vx - a.vx) * responseX + (b.vy - a.vy) * responseY;
+            if (relativeVelocity < 0) {
+              const impactSpeed = Math.abs(relativeVelocity);
+              const pairKey = a.id < b.id ? `${a.id}:${b.id}` : `${b.id}:${a.id}`;
+              const firstHitThisStep = !state.contactImpulsePairs.has(pairKey);
+
+              if (firstHitThisStep) {
+                state.contactImpulsePairs.add(pairKey);
+                const verticalBias = Math.abs(contact.normalY);
+                const restitution = response.soft || impactSpeed <= MIN_BOUNCE_SPEED
+                  ? 0
+                  : (verticalBias > 0.65 ? CONTACT_RESTITUTION : 0.14);
+                const impulse = -(1 + restitution) * relativeVelocity;
+
+                if (verticalBias > 0.65) {
+                  const above = contact.normalY > 0 ? a : b;
+                  const below = contact.normalY > 0 ? b : a;
+                  const sideSign = above === a ? 1 : -1;
+                  const belowRecoil = response.soft ? 0 : CONTACT_RECOIL;
+
+                  above.vx = above.vx * 0.94 - impulse * responseX * sideSign;
+                  above.vy = above.vy * 0.94 - impulse * responseY * sideSign;
+                  below.vx = below.vx * 0.97 + impulse * responseX * sideSign;
+                  below.vy = below.vy * 0.97 + impulse * responseY * sideSign * belowRecoil;
+                } else {
+                  a.vx = a.vx * 0.96 - impulse * responseX;
+                  a.vy = a.vy * 0.97 - impulse * responseY;
+                  b.vx = b.vx * 0.96 + impulse * responseX;
+                  b.vy = b.vy * 0.97 + impulse * responseY;
+                }
+
+                if (impactSpeed > 42) {
+                  const impactSquash = clamp(impactSpeed / 2050, 0.1, 0.36);
+                  a.squash = Math.max(a.squash, impactSquash);
+                  b.squash = Math.max(b.squash, impactSquash * 0.78);
+                  a.squashVelocity -= impactSquash * 4.4;
+                  b.squashVelocity -= impactSquash * 3.2;
+                }
+              }
+            }
+
+            const tangentX = -responseY;
+            const tangentY = responseX;
+            const tangentA = a.vx * tangentX + a.vy * tangentY;
+            const tangentB = b.vx * tangentX + b.vy * tangentY;
+            const sharedTangent = (tangentA + tangentB) * 0.5;
+            const tangentBlend = Math.abs(contact.normalY) > 0.65 ? 0.12 : 0.06;
+            a.vx += (sharedTangent - tangentA) * tangentX * tangentBlend;
+            a.vy += (sharedTangent - tangentA) * tangentY * tangentBlend;
+            b.vx += (sharedTangent - tangentB) * tangentX * tangentBlend;
+            b.vy += (sharedTangent - tangentB) * tangentY * tangentBlend;
+
+            const flatSupport = Math.abs(contact.normalY) > 0.94 && Math.abs(contact.normalX) < 0.34;
+            if (flatSupport && contact.normalY > 0) b.contactBelow = true;
+            else if (flatSupport && contact.normalY < 0) a.contactBelow = true;
+          }
+        }
+      }
+
+      function resolveBounds() {
+        state.bodies.forEach((body) => {
+          const shape = collisionShape(body);
+          if (body.x < shape.halfW) {
+            body.x = shape.halfW;
+            if (body.vx < 0) body.vx = -body.vx * WALL_RESTITUTION;
+          } else if (body.x > WORLD_W - shape.halfW) {
+            body.x = WORLD_W - shape.halfW;
+            if (body.vx > 0) body.vx = -body.vx * WALL_RESTITUTION;
+          }
+
+          const bounds = {
+            top: body.y - shape.halfH,
+            bottom: body.y + shape.halfH
+          };
+          if (bounds.bottom > FLOOR_Y) {
+            if (body.vy > 55) {
+              const impactSquash = clamp((body.vy - 40) / 1450, 0.1, 0.4);
+              body.squash = Math.max(body.squash, impactSquash);
+              body.squashVelocity -= impactSquash * 4.4;
+              body.pulse = Math.max(body.pulse, 0.2);
+            }
+            body.y = FLOOR_Y - shape.halfH;
+            body.vy = body.vy > MIN_BOUNCE_SPEED ? -body.vy * FLOOR_RESTITUTION : 0;
+            body.vx *= 0.88;
+            body.contactBelow = true;
+          }
+
+          const upperLimit = -MAX_TILE_SIZE * 8;
+          if (body.y < upperLimit) {
+            body.y = upperLimit;
+            if (body.vy < 0) body.vy = 0;
+          }
+        });
+      }
+
+      function maxPenetration() {
+        let maximum = 0;
+        for (let i = 0; i < state.bodies.length; i += 1) {
+          for (let j = i + 1; j < state.bodies.length; j += 1) {
+            const contact = contactsFor(state.bodies[i], state.bodies[j]);
+            maximum = Math.max(maximum, contact.penetration);
+          }
+        }
+        return maximum;
+      }
+
+      function boardIsSettled() {
+        if (!state.bodies.length) return true;
+        return state.quiet && maxPenetration() <= 2.8;
+      }
+
+      function mergeBodies(pair) {
+        const { a, b } = pair;
+        const newValue = a.value * 2;
+        const mergedHalfSize = halfSizeForValue(newValue);
+        const newX = clamp((a.x + b.x) / 2, mergedHalfSize, WORLD_W - mergedHalfSize);
+        const newY = clamp((a.y + b.y) / 2, mergedHalfSize, FLOOR_Y - mergedHalfSize);
+        const merged = createBody(
+          newValue,
+          newX,
+          newY,
+          (a.vx + b.vx) * 0.25,
+          Math.min((a.vy + b.vy) * 0.2, 0) - 28
+        );
+
+        merged.pulse = 1;
+        merged.squash = -0.1;
+        merged.squashVelocity = -4.5;
+        state.bodies = state.bodies.filter((body) => body !== a && body !== b);
+        state.bodies.push(merged);
+        state.stableTime = 0;
+        state.quiet = false;
+        state.lastMergeAt = performance.now();
+        state.score += newValue;
+        state.maxTile = Math.max(state.maxTile, newValue);
+
+        if (state.score > state.best) {
+          state.best = state.score;
+          try {
+            localStorage.setItem("gravity-2048-free-best", String(state.best));
+          } catch (error) {
+            // Local storage is optional.
+          }
+        }
+
+        addTextEffect(newX, newY - 38, `+${newValue}`);
+        addMergeSparks(newX, newY);
+        updateScoreUI(true);
+        updateHeightUI();
+
+        if (!state.reached2048 && newValue >= 2048) {
+          state.reached2048 = true;
+          addTextEffect(WORLD_W / 2, DANGER_Y + 45, "达到 2048");
+        }
+      }
+
+      function integrateBodySprings(dt) {
+        state.bodies.forEach((body) => {
+          body.pulse *= Math.exp(-9 * dt);
+          body.squashVelocity += (-SOFT_SPRING * body.squash - SOFT_DAMPING * body.squashVelocity) * dt;
+          body.squash += body.squashVelocity * dt;
+          if (Math.abs(body.squash) < 0.002 && Math.abs(body.squashVelocity) < 0.025) {
+            body.squash = 0;
+            body.squashVelocity = 0;
+          }
+        });
+      }
+
+      function physicsStep(dt) {
+        if (state.mode !== "falling") {
+          integrateBodySprings(dt);
+          return;
+        }
+
+        const frameStart = state.bodies.map((body) => ({ body, x: body.x, y: body.y }));
+        state.physicsStep += 1;
+        state.contactImpulsePairs.clear();
+
+        state.bodies.forEach((body) => {
+          body.contactBelow = false;
+          body.vy += GRAVITY * dt;
+          body.vx *= Math.pow(0.994, dt * 60);
+          body.x += body.vx * dt;
+          body.y += body.vy * dt;
+        });
+
+        // 先处理合成，再处理不同数字之间的普通弹性碰撞。
+        const mergePair = findMergeContact();
+        if (mergePair) {
+          mergeBodies(mergePair);
+          return;
+        }
+
+        for (let iteration = 0; iteration < 7; iteration += 1) {
+          resolveContacts();
+          resolveBounds();
+        }
+
+        let maximumMotion = 0;
+        frameStart.forEach((entry) => {
+          if (!state.bodies.includes(entry.body)) return;
+          maximumMotion = Math.max(
+            maximumMotion,
+            Math.abs(entry.body.x - entry.x),
+            Math.abs(entry.body.y - entry.y)
+          );
+        });
+        state.quiet = maximumMotion < 0.8 && maxPenetration() <= 2.8;
+
+        state.bodies.forEach((body) => {
+          if (body.contactBelow && Math.abs(body.vy) < 15) body.vy = 0;
+          if (body.contactBelow && Math.abs(body.vx) < 4) body.vx *= 0.72;
+        });
+        integrateBodySprings(dt);
+      }
+
+      function updateEffects(dt) {
+        state.effects = state.effects.filter((effect) => {
+          effect.life -= dt;
+          if (effect.type === "text") {
+            effect.y += effect.vy * dt;
+            effect.vy *= 0.96;
+          } else {
+            effect.x += effect.vx * dt;
+            effect.y += effect.vy * dt;
+            effect.vy += 170 * dt;
+            effect.angle += dt * 2.4;
+          }
+          return effect.life > 0;
+        });
+      }
+
+      function updateActiveVisual(dt) {
+        if (!state.activeTile) return;
+        const targetX = clampAimX(state.aimX);
+        const smoothing = 1 - Math.exp(-18 * dt);
+        state.activeTile.x += (targetX - state.activeTile.x) * smoothing;
+        state.activeTile.y = ACTIVE_Y;
+        state.activeTile.pulse *= Math.exp(-8 * dt);
+      }
+
+      function spawnNextTile(nextMode = "ready") {
+        if (state.mode === "gameover") return;
+
+        const nextValue = state.nextValue;
+        state.nextValue = randomValue();
+        updateNextPreview();
+        state.aimX = clampXForValue(state.aimX, nextValue);
+
+        state.activeTile = {
+          value: nextValue,
+          x: state.aimX,
+          y: ACTIVE_Y,
+          pulse: 0.6,
+          squash: 0,
+          squashVelocity: 0,
+          phase: 0.4
+        };
+
+        state.mode = nextMode;
+        state.stableTime = 0;
+        refreshDropReadiness(true);
+        if (nextMode === "falling") {
+          updateStatus("可以继续下落", "上一块仍在下落，随时可以投下下一块，也可继续自由移动落点。");
+        } else {
+          updateStatus("选择落点", "左右移动自由选位，数值越大方块越大。");
+        }
+      }
+
+      function completeDropIfSettled(dt) {
+        if (state.mode !== "falling") return;
+
+        if (boardIsSettled()) {
+          state.stableTime += dt;
+        } else {
+          state.stableTime = 0;
+        }
+
+        state.bodies.forEach((body) => {
+          body.pulse *= Math.exp(-8 * dt);
+        });
+
+        if (state.stableTime < 0.34) return;
+
+        updateHeightUI();
+        if (state.bodies.some((body) => bodyBounds(body).top < DANGER_Y)) {
+          endGame();
+          return;
+        }
+
+        state.mode = "ready";
+        state.stableTime = 0;
+        refreshDropReadiness(true);
+        updateStatus("选择落点", "上一块已稳定，可以继续投放。");
+      }
+
+      function endGame() {
+        if (state.mode === "gameover") return;
+        state.mode = "gameover";
+        state.dropReady = false;
+        state.activeTile = null;
+        finalScore.textContent = String(state.score);
+        gameOver.hidden = false;
+        updateControls();
+        updateHeightUI();
+        updateStatus("游戏结束", "堆叠越过了高度上限。");
+      }
+
+      function newGame() {
+        state.roundToken += 1;
+        state.mode = "idle";
+        state.bodies = [];
+        state.effects = [];
+        state.bodySerial = 0;
+        state.activeTile = null;
+        state.aimX = WORLD_W / 2;
+        state.score = 0;
+        state.maxTile = 2;
+        state.reached2048 = false;
+        state.stableTime = 0;
+        state.quiet = false;
+        state.pointerDown = false;
+        state.dropReady = false;
+        state.contactImpulsePairs.clear();
+        state.physicsStep = 0;
+
+        gameOver.hidden = true;
+        updateScoreUI(false);
+        updateHeightUI();
+
+        state.nextValue = randomValue();
+        updateNextPreview();
+        const firstValue = randomValue();
+        state.aimX = clampXForValue(state.aimX, firstValue);
+        state.activeTile = {
+          value: firstValue,
+          x: state.aimX,
+          y: ACTIVE_Y,
+          pulse: 0.7,
+          squash: 0,
+          squashVelocity: 0,
+          phase: 0.4
+        };
+        state.mode = "ready";
+        refreshDropReadiness(true);
+        updateStatus("选择落点", "左右移动自由选位，数值越大方块越大。");
+      }
+
+
+      function dropActiveTile() {
+        if (!canDropActiveTile()) return;
+
+        const active = state.activeTile;
+        const dropX = clampAimX(active.x);
+        const body = createBody(
+          active.value,
+          dropX,
+          spawnYForX(dropX, active.value),
+          0,
+          38
+        );
+        body.pulse = 0.35;
+        state.bodies.push(body);
+        state.mode = "falling";
+        state.stableTime = 0;
+        state.quiet = false;
+        spawnNextTile("falling");
+        refreshDropReadiness(true);
+      }
+
+      function frame(now) {
+        const elapsed = Math.min((now - lastFrameTime) / 1000, 0.05);
+        lastFrameTime = now;
+        accumulator += elapsed;
+
+        while (accumulator >= FIXED_DT) {
+          physicsStep(FIXED_DT);
+          accumulator -= FIXED_DT;
+        }
+
+        completeDropIfSettled(elapsed);
+        refreshDropReadiness();
+        updateActiveVisual(elapsed);
+        updateEffects(elapsed);
+        renderBoard();
+        requestAnimationFrame(frame);
+      }
+
+      function handlePointerDown(event) {
+        if (!isPlaying()) return;
+        event.preventDefault();
+        state.pointerDown = true;
+        state.aimX = canvasToWorldX(event.clientX);
+        try {
+          canvas.setPointerCapture(event.pointerId);
+        } catch (error) {
+          // Pointer capture is not essential.
+        }
+      }
+
+      function handlePointerMove(event) {
+        if (!isPlaying()) return;
+        if (!state.pointerDown && event.pointerType !== "mouse") return;
+        state.aimX = canvasToWorldX(event.clientX);
+      }
+
+      function handlePointerUp(event) {
+        if (!state.pointerDown) return;
+        state.pointerDown = false;
+        state.aimX = canvasToWorldX(event.clientX);
+        dropActiveTile();
+      }
+
+      canvas.addEventListener("pointerdown", handlePointerDown);
+      canvas.addEventListener("pointermove", handlePointerMove);
+      canvas.addEventListener("pointerup", handlePointerUp);
+      canvas.addEventListener("pointercancel", () => {
+        state.pointerDown = false;
+      });
+      canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+
+      restartButton.addEventListener("click", newGame);
+      gameOverRestart.addEventListener("click", newGame);
+      leftButton.addEventListener("click", () => {
+        if (isPlaying()) {
+          state.aimX = clampAimX(state.aimX - 18);
+        }
+      });
+      rightButton.addEventListener("click", () => {
+        if (isPlaying()) {
+          state.aimX = clampAimX(state.aimX + 18);
+        }
+      });
+      dropButton.addEventListener("click", dropActiveTile);
+
+      window.addEventListener("keydown", (event) => {
+        const key = event.key;
+        const focusedButton = event.target instanceof HTMLButtonElement;
+
+        if (key === "ArrowLeft" || key === "a" || key === "A") {
+          event.preventDefault();
+          if (isPlaying()) {
+            state.aimX = clampAimX(state.aimX - 14);
+          }
+          return;
+        }
+
+        if (key === "ArrowRight" || key === "d" || key === "D") {
+          event.preventDefault();
+          if (isPlaying()) {
+            state.aimX = clampAimX(state.aimX + 14);
+          }
+          return;
+        }
+
+        if ((key === " " || key === "ArrowDown" || key === "Enter") && !focusedButton) {
+          event.preventDefault();
+          dropActiveTile();
+          return;
+        }
+
+        if (key === "r" || key === "R") {
+          event.preventDefault();
+          newGame();
+        }
+      });
+
+      document.addEventListener("visibilitychange", () => {
+        lastFrameTime = performance.now();
+        accumulator = 0;
+      });
+
+      const resizeObserver = "ResizeObserver" in window
+        ? new ResizeObserver(syncCanvasSize)
+        : null;
+
+      if (resizeObserver) resizeObserver.observe(canvas);
+      window.addEventListener("resize", syncCanvasSize);
+
+      try {
+        state.best = Number(localStorage.getItem("gravity-2048-free-best")) || 0;
+      } catch (error) {
+        state.best = 0;
+      }
+
+      syncCanvasSize();
+      newGame();
+      requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>
+
+
+
+
