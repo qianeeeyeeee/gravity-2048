@@ -1,0 +1,13 @@
+{
+  "name": "gravity-2048",
+  "version": "1.0.0",
+  "private": true,
+  "description": "重力下落式 2048，支持自由横向落点、弹性碰撞和合成优先。",
+  "scripts": {
+    "build": "node build/build-windows-exe.js",
+    "build:win": "node build/build-windows-exe.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

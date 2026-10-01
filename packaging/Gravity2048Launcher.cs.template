@@ -1,0 +1,160 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.IO.Compression;
+using System.Reflection;
+using System.Text;
+
+[assembly: AssemblyTitle("2048 下落")]
+[assembly: AssemblyProduct("2048 下落")]
+[assembly: AssemblyDescription("重力版 2048 单文件启动器")]
+[assembly: AssemblyCompany("Codex")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+
+internal static class Program
+{
+    private const string EmbeddedHtmlGzipBase64 = "__EMBEDDED_HTML_BASE64__";
+
+    [STAThread]
+    private static int Main(string[] args)
+    {
+        try
+        {
+            byte[] htmlBytes = DecompressHtml(EmbeddedHtmlGzipBase64);
+
+            if (args.Length >= 2 && string.Equals(args[0], "--extract", StringComparison.OrdinalIgnoreCase))
+            {
+                WriteFileWithParent(args[1], htmlBytes);
+                return 0;
+            }
+
+            if (args.Length >= 2 && string.Equals(args[0], "--self-test", StringComparison.OrdinalIgnoreCase))
+            {
+                string edgePath = FindEdge();
+                string report = "OK" + Environment.NewLine
+                    + "HTML_BYTES=" + htmlBytes.Length + Environment.NewLine
+                    + "EDGE=" + (edgePath == null ? "NOT_FOUND" : edgePath) + Environment.NewLine;
+                WriteFileWithParent(args[1], new UTF8Encoding(false).GetBytes(report));
+                return 0;
+            }
+
+            string appDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Gravity2048"
+            );
+            Directory.CreateDirectory(appDir);
+
+            string htmlPath = Path.Combine(appDir, "gravity-2048.html");
+            File.WriteAllBytes(htmlPath, htmlBytes);
+
+            string edge = FindEdge();
+            if (!string.IsNullOrEmpty(edge))
+            {
+                string profileDir = Path.Combine(appDir, "edge-profile");
+                Directory.CreateDirectory(profileDir);
+                string uri = new Uri(htmlPath).AbsoluteUri;
+                string arguments = "--app=\"" + uri + "\""
+                    + " --user-data-dir=\"" + profileDir + "\""
+                    + " --window-size=1180,760"
+                    + " --no-first-run"
+                    + " --no-default-browser-check";
+                ProcessStartInfo edgeInfo = new ProcessStartInfo(edge, arguments);
+                edgeInfo.UseShellExecute = true;
+                edgeInfo.WorkingDirectory = appDir;
+                Process.Start(edgeInfo);
+            }
+            else
+            {
+                ProcessStartInfo fallback = new ProcessStartInfo(htmlPath);
+                fallback.UseShellExecute = true;
+                Process.Start(fallback);
+            }
+
+            return 0;
+        }
+        catch (Exception error)
+        {
+            try
+            {
+                string logDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Gravity2048"
+                );
+                Directory.CreateDirectory(logDir);
+                File.AppendAllText(
+                    Path.Combine(logDir, "launcher-error.log"),
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + error + Environment.NewLine,
+                    new UTF8Encoding(false)
+                );
+            }
+            catch
+            {
+            }
+            return 1;
+        }
+    }
+
+    private static void WriteFileWithParent(string path, byte[] bytes)
+    {
+        string fullPath = Path.GetFullPath(path);
+        string parent = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(parent))
+        {
+            Directory.CreateDirectory(parent);
+        }
+        File.WriteAllBytes(fullPath, bytes);
+    }
+
+    private static byte[] DecompressHtml(string value)
+    {
+        byte[] compressed = Convert.FromBase64String(value);
+        using (MemoryStream input = new MemoryStream(compressed))
+        using (GZipStream gzip = new GZipStream(input, CompressionMode.Decompress))
+        using (MemoryStream output = new MemoryStream())
+        {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = gzip.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                output.Write(buffer, 0, read);
+            }
+            return output.ToArray();
+        }
+    }
+
+    private static string FindEdge()
+    {
+        string custom = Environment.GetEnvironmentVariable("GRAVITY2048_BROWSER");
+        if (!string.IsNullOrEmpty(custom) && File.Exists(custom))
+        {
+            return custom;
+        }
+
+        string[] candidates = new string[]
+        {
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                @"Microsoft\Edge\Application\msedge.exe"
+            ),
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                @"Microsoft\Edge\Application\msedge.exe"
+            ),
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                @"Microsoft\Edge\Application\msedge.exe"
+            )
+        };
+
+        for (int index = 0; index < candidates.Length; index += 1)
+        {
+            if (File.Exists(candidates[index]))
+            {
+                return candidates[index];
+            }
+        }
+
+        return null;
+    }
+}

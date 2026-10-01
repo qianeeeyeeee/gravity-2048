@@ -1,0 +1,71 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build EXE
+        run: node build/build-windows-exe.js
+
+      - name: Verify embedded HTML
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build/test | Out-Null
+          $process = Start-Process `
+            -FilePath .\dist\Gravity2048.exe `
+            -ArgumentList @('--self-test', (Resolve-Path build/test).Path + '\self-test.txt') `
+            -Wait `
+            -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "自检失败，退出码: $($process.ExitCode)"
+          }
+          Get-Content build/test/self-test.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gravity2048-Windows
+          path: |
+            dist/Gravity2048.exe
+            dist/Gravity2048.exe.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag dist/Gravity2048.exe dist/Gravity2048.exe.sha256 --clobber
+          } else {
+            gh release create $tag `
+              dist/Gravity2048.exe `
+              dist/Gravity2048.exe.sha256 `
+              --title "2048 下落 $tag" `
+              --generate-notes
+          }
